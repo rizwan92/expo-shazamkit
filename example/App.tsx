@@ -25,7 +25,7 @@ export default function App() {
       }
       setSearching(true);
       const result = await ExpoShazamKit.startListening();
-      if (result.length > 0) {
+      if (result?.length > 0) {
         setSong(result[0]);
       } else {
         Alert.alert("No Match", "No songs found");

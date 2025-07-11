@@ -12,7 +12,7 @@ class ShazamKitModule : Module() {
     // Sets the name of the module that JavaScript code will use to refer to the module. Takes a string as an argument.
     // Can be inferred from module's class name, but it's recommended to set it explicitly for clarity.
     // The module will be accessible from `requireNativeModule('ShazamKitModule')` in JavaScript.
-    Name("ShazamKitModule")
+    Name("ExpoShazamKit")
 
     // Sets constant properties on the module. Can take a dictionary or a closure that returns a dictionary.
     Constants(
@@ -24,7 +24,12 @@ class ShazamKitModule : Module() {
 
     // Defines a JavaScript synchronous function that runs the native code on the JavaScript thread.
     Function("hello") {
-      "Hello world! 👋"
+      "Hello from Android ExpoShazamKit module! 🎵"
+    }
+
+    // Function that accepts a name parameter and returns a personalized greeting
+    Function("helloWithName") { name: String ->
+      "Hello $name from Android ExpoShazamKit module! 🎵"
     }
 
     // Defines a JavaScript function that always returns a Promise and whose native code

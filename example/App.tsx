@@ -19,6 +19,10 @@ export default function App() {
   const [song, setSong] = useState<MatchedItem | null>(null);
 
   const startListening = async () => {
+    console.log(
+      "Starting to listen for songs...",
+      JSON.stringify(ExpoShazamKit.hello()),
+    );
     try {
       if (song) {
         setSong(null);

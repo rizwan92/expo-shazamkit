@@ -15,12 +15,16 @@ export default nativeModule || {
     return `Hello ${name} from fallback implementation`;
   },
 
-  startListening() {},
+  startListening(developerToken: string): Promise<string> {
+    return Promise.reject("Not implemented on this platform");
+  },
 
-  stopListening() {},
+  stopListening(): Promise<void> {
+    return Promise.reject("Not implemented on this platform");
+  },
 
-  addToShazamLibrary() {
-    return { success: false };
+  setValueAsync(value: string): Promise<void> {
+    return Promise.reject("Not implemented on this platform");
   },
 
   addListener() {

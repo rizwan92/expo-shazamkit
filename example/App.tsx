@@ -14,21 +14,19 @@ import {
   View,
 } from "react-native";
 
+const TOKEN = "";
+
 export default function App() {
   const [searching, setSearching] = useState(false);
   const [song, setSong] = useState<MatchedItem | null>(null);
 
   const startListening = async () => {
-    console.log(
-      "Starting to listen for songs...",
-      JSON.stringify(ExpoShazamKit.hello()),
-    );
     try {
       if (song) {
         setSong(null);
       }
       setSearching(true);
-      const result = await ExpoShazamKit.startListening();
+      const result = await ExpoShazamKit.startListening(TOKEN);
       if (result?.length > 0) {
         setSong(result[0]);
       } else {

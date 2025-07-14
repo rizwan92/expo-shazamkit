@@ -27,7 +27,7 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "expo.community.modules.shazamkit.example"
+      "package": "com.aisound.app"
     },
     "plugins": [
       [

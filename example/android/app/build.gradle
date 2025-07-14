@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'expo.community.modules.shazamkit.example'
+    namespace 'com.aisound.app'
     defaultConfig {
-        applicationId 'expo.community.modules.shazamkit.example'
+        applicationId 'com.aisound.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

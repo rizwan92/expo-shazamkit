@@ -30,6 +30,11 @@ allprojects {
     google()
     mavenCentral()
     maven { url 'https://www.jitpack.io' }
+    
+    // Add flatDir for local AAR files from the expo-shazamkit module
+    flatDir {
+      dirs '../../../android/libs'
+    }
   }
 }
 

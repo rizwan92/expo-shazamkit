@@ -1,4 +1,4 @@
-package expo.community.modules.shazamkit.example
+package com.aisound.app
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

@@ -13,8 +13,8 @@ export function helloWithName(name: string): string {
   return ExpoShazamKit.helloWithName(name);
 }
 
-export async function startListening(): Promise<MatchedItem[]> {
-  return await ExpoShazamKit.startListening();
+export async function startListening(token: string): Promise<MatchedItem[]> {
+  return await ExpoShazamKit.startListening(token);
 }
 
 export function stopListening() {

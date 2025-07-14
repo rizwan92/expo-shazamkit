@@ -1,4 +1,4 @@
-package expo.community.modules.shazamkit.example
+package com.aisound.app
 
 import android.app.Application
 import android.content.res.Configuration

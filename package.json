@@ -1,5 +1,5 @@
 {
-  "name": "expo-shazamkit",
+  "name": "react-native-shazamkit",
   "version": "1.0.0",
   "description": "ShazamKit for React Native",
   "main": "build/index.js",

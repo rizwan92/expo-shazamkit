@@ -14,6 +14,8 @@ import {
   View,
 } from "react-native";
 
+const TOKEN = "";
+
 export default function App() {
   const [searching, setSearching] = useState(false);
   const [song, setSong] = useState<MatchedItem | null>(null);
@@ -24,8 +26,8 @@ export default function App() {
         setSong(null);
       }
       setSearching(true);
-      const result = await ExpoShazamKit.startListening();
-      if (result.length > 0) {
+      const result = await ExpoShazamKit.startListening(TOKEN);
+      if (result?.length > 0) {
         setSong(result[0]);
       } else {
         Alert.alert("No Match", "No songs found");

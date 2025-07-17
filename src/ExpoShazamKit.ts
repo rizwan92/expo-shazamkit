@@ -1,16 +1,30 @@
-import { NativeModulesProxy } from "expo-modules-core";
+import { requireNativeModule } from "expo-modules-core";
 
-export default NativeModulesProxy.ExpoShazamKit || {
+const nativeModule = requireNativeModule("ExpoShazamKit");
+
+export default nativeModule || {
   isAvailable(): boolean {
     return false;
   },
 
-  startListening() {},
+  hello(): string {
+    return "Hello from fallback implementation";
+  },
 
-  stopListening() {},
+  helloWithName(name: string): string {
+    return `Hello ${name} from fallback implementation`;
+  },
 
-  addToShazamLibrary() {
-    return { success: false };
+  startListening(developerToken: string): Promise<string> {
+    return Promise.reject("Not implemented on this platform");
+  },
+
+  stopListening(): Promise<void> {
+    return Promise.reject("Not implemented on this platform");
+  },
+
+  setValueAsync(value: string): Promise<void> {
+    return Promise.reject("Not implemented on this platform");
   },
 
   addListener() {

@@ -1,5 +1,5 @@
 {
-  "name": "react-native-shazamkit",
+  "name": "react-native-apple-shazamkit",
   "version": "1.0.0",
   "description": "ShazamKit for React Native",
   "main": "build/index.js",

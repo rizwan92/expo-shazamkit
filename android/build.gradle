@@ -43,14 +43,10 @@ if (useManagedAndroidSdkVersions) {
 repositories {
   google()
   mavenCentral()
-  // Add flatDir for local AAR files
-  flatDir {
-    dirs 'libs'
-  }
 }
 
 dependencies {
-    implementation(name: "shazamkit-android-release", ext: "aar")
+    implementation files('libs/shazamkit-android-release.aar')
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.4.1'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.4.1'
     implementation 'com.squareup.okhttp3:okhttp:4.9.0'

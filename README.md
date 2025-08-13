@@ -1,6 +1,6 @@
-# Expo Shazamkit
+# React Native Apple ShazamKit
 
-Shazam for React Native
+ShazamKit for React Native with iOS and Android support
 
 ## Preview
 
@@ -9,8 +9,22 @@ https://user-images.githubusercontent.com/30924086/229935589-ef3e60ae-10f0-4e0d-
 # Installation
 
 ```sh
-npx expo install expo-shazamkit
+npm install react-native-apple-shazamkit
 ```
+
+or
+
+```sh
+yarn add react-native-apple-shazamkit
+```
+
+## Platform Support
+
+This library supports:
+- ✅ iOS (15.0+)
+- ✅ Android (API 21+)
+- ✅ Expo (managed workflow)
+- ✅ React Native (bare workflow)
 
 For bare React Native projects, you must ensure that you have [installed and configured the `expo` package](https://docs.expo.dev/bare/installing-expo-modules/) before continuing.
 
@@ -27,17 +41,28 @@ Add the following to your `Info.plist`:
 <string>$(PRODUCT_NAME) would like to access your microphone</string>
 ```
 
-ShazmamKit is only available on iOS 15.0 and above. You'll need to set your deployment target to iOS 15.0 or above.
+ShazamKit is only available on iOS 15.0 and above. You'll need to set your deployment target to iOS 15.0 or above.
+
+## Configuration for Android 🤖
+
+Add the following permissions to your `android/app/src/main/AndroidManifest.xml`:
+
+```xml
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.INTERNET" />
+```
+
+Android support requires API level 21 (Android 5.0) or above.
 
 ## Activate the ShazamKit service
 
 On your apple developer account page, under `Certificates, Identifiers & Profiles` select `Identifiers`. If you have already created an identifier for your app, select it. If not, create a new one. Under `App Services` enable `ShazamKit`.
 
-### Plugin
+### Plugin Configuration
 
 You need to request access to the microphone to record audio. You can use the plugin to set the message you would like or use the default `Allow $(PRODUCT_NAME) to access your microphone`.
 
-Also, you will need to set the deployment target to iOS 15.0 or above. You can do this by installing `expo-build-properties`
+Also, you will need to set the deployment target to iOS 15.0 or above for iOS. You can do this by installing `expo-build-properties`
 
 `app.json`
 
@@ -45,7 +70,7 @@ Also, you will need to set the deployment target to iOS 15.0 or above. You can d
 {
   "plugins": [
     [
-      "expo-shazamkit",
+      "react-native-apple-shazamkit",
       {
         "microphonePermission": "Your permission message"
       }
@@ -55,6 +80,9 @@ Also, you will need to set the deployment target to iOS 15.0 or above. You can d
       {
         "ios": {
           "deploymentTarget": "15.0"
+        },
+        "android": {
+          "minSdkVersion": 21
         }
       }
     ]
@@ -66,7 +94,7 @@ Also, you will need to set the deployment target to iOS 15.0 or above. You can d
 
 ```ts
 import * as Linking from "expo-linking";
-import * as ExpoShazamKit from "expo-shazamkit";
+import * as ReactNativeAppleShazamKit from "react-native-apple-shazamkit";
 
 // ...
 const [searching, setSearching] = useState(false);
@@ -79,7 +107,7 @@ const startListening = async () => {
     }
 
     setSearching(true);
-    const result = await ExpoShazamKit.startListening();
+    const result = await ReactNativeAppleShazamKit.startListening();
     if (result.length > 0) {
       setSong(result[0]);
     } else {
@@ -131,12 +159,26 @@ const startListening = async () => {
 
 ### Available methods
 
-| Name                 | Description                                                                                               |
-| -------------------- | --------------------------------------------------------------------------------------------------------- |
-| `isAvailable`        | Returns a boolean indicating if the library is available on the current platform                          |
-| `startListening`     | async. Returns an array of matches. Usually only contains a single item                                   |
-| `stopListening`      | Stop the recording                                                                                        |
-| `addToShazamLibrary` | async. Adds the most recently discovered item to the users Shazam library. returns `{ success: boolean }` |
+| Name                 | iOS | Android | Description                                                                                               |
+| -------------------- | --- | ------- | --------------------------------------------------------------------------------------------------------- |
+| `isAvailable`        | ✅   | ✅       | Returns a boolean indicating if the library is available on the current platform                          |
+| `startListening`     | ✅   | ✅       | async. Returns an array of matches. Usually only contains a single item                                   |
+| `stopListening`      | ✅   | ✅       | Stop the recording                                                                                        |
+| `addToShazamLibrary` | ✅   | ❌       | async. Adds the most recently discovered item to the users Shazam library. returns `{ success: boolean }` (iOS only) |
+
+### Platform-specific Notes
+
+**iOS:**
+- Full ShazamKit API support
+- Add to Shazam Library functionality
+- Requires iOS 15.0+
+- Apple Music integration
+
+**Android:**
+- Audio recognition using Shazam's audio fingerprinting
+- Basic song identification
+- Requires Android API 21+ (Android 5.0)
+- No Shazam Library integration (platform limitation)
 
 # Contributing
 

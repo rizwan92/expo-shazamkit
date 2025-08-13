@@ -1,6 +1,6 @@
 {
   "name": "react-native-apple-shazamkit",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "ShazamKit for React Native",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -24,13 +24,13 @@
     "music",
     "ios"
   ],
-  "repository": "https://github.com/alanjhughes/expo-shazamkit",
+  "repository": "https://github.com/rizwan92/expo-shazamkit",
   "bugs": {
-    "url": "https://github.com/alanjhughes/expo-shazamkit/issues"
+    "url": "https://github.com/rizwan92/expo-shazamkit/issues"
   },
-  "author": "Alan Hughes <hughesno1@gmail.com> (https://github.com/alanjhughes)",
+  "author": "Rizwan92 <chouhan.rizwan@gmail.com> (https://github.com/rizwan92)",
   "license": "MIT",
-  "homepage": "https://github.com/alanjhughes/expo-shazamkit#readme",
+  "homepage": "https://github.com/rizwan92/expo-shazamkit#readme",
   "dependencies": {},
   "devDependencies": {
     "@types/react": "~18.2.14",

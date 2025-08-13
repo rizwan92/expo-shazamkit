@@ -1,7 +1,7 @@
 {
   "name": "react-native-apple-shazamkit",
-  "version": "1.0.4",
-  "description": "ShazamKit for React Native",
+  "version": "1.0.3",
+  "description": "🎵 Powerful music recognition for React Native using Apple's ShazamKit. Identify songs, get metadata, and integrate with Apple Music seamlessly.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
@@ -35,7 +35,7 @@
   "devDependencies": {
     "@types/react": "~18.2.14",
     "expo-module-scripts": "^3.1.0",
-    "expo-modules-core": "^1.5.11",
+    "expo-modules-core": "^2.5.0",
     "jsonwebtoken": "^9.0.2"
   },
   "peerDependencies": {

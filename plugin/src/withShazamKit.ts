@@ -1,6 +1,6 @@
 import { ConfigPlugin, createRunOncePlugin } from "@expo/config-plugins";
 
-const pkg = require("expo-shazamkit/package.json");
+const pkg = require("react-native-apple-shazamkit/package.json");
 
 const MICROPHONE_USAGE = "Allow $(PRODUCT_NAME) to access your microphone";
 

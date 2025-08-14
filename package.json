@@ -1,6 +1,6 @@
 {
   "name": "react-native-apple-shazamkit",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "🎵 Powerful music recognition for React Native using Apple's ShazamKit. Identify songs, get metadata, and integrate with Apple Music seamlessly.",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -19,18 +19,43 @@
   "keywords": [
     "react-native",
     "expo",
+    "expo-module",
     "ShazamKit",
     "shazam",
     "music",
-    "ios"
+    "audio",
+    "recognition",
+    "identification",
+    "ios",
+    "android",
+    "apple-music",
+    "song-recognition",
+    "audio-fingerprinting"
   ],
-  "repository": "https://github.com/rizwan92/expo-shazamkit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rizwan92/expo-shazamkit.git"
+  },
   "bugs": {
     "url": "https://github.com/rizwan92/expo-shazamkit/issues"
   },
   "author": "Rizwan92 <chouhan.rizwan@gmail.com> (https://github.com/rizwan92)",
   "license": "MIT",
   "homepage": "https://github.com/rizwan92/expo-shazamkit#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "files": [
+    "build",
+    "ios",
+    "android",
+    "plugin/build",
+    "app.plugin.js",
+    "expo-module.config.json",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "dependencies": {},
   "devDependencies": {
     "@types/react": "~18.2.14",

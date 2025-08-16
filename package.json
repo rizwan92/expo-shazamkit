@@ -1,6 +1,6 @@
 {
   "name": "react-native-apple-shazamkit",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "🎵 Powerful music recognition for React Native using Apple's ShazamKit. Identify songs, get metadata, and integrate with Apple Music seamlessly.",
   "main": "build/index.js",
   "types": "build/index.d.ts",

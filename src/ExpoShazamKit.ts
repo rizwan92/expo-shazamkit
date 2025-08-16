@@ -1,6 +1,17 @@
-import { requireNativeModule } from "expo-modules-core";
+import {
+  NativeModulesProxy,
+  Platform,
+  ProxyNativeModule,
+  requireNativeModule,
+} from "expo-modules-core";
 
-const nativeModule = requireNativeModule("ExpoShazamKit");
+let nativeModule: ProxyNativeModule | null = null;
+
+if (Platform.OS === "ios") {
+  nativeModule = NativeModulesProxy.ExpoShazamKit;
+} else if (Platform.OS === "android") {
+  nativeModule = requireNativeModule("ExpoShazamKit");
+}
 
 export default nativeModule || {
   isAvailable(): boolean {

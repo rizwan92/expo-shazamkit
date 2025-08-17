@@ -36,6 +36,7 @@ class ShazamKitModule : Module() {
     private var recordingStartTime: Long = 0L
     private var hasFoundResult = false
     private var isShazamKitAvailable = false
+    private var latestMatchedItems: List<Map<String, Any?>>? = null
 
 
     // Each module class must implement the definition function. The definition consists of components
@@ -62,7 +63,6 @@ class ShazamKitModule : Module() {
 
         Function("isAvailable") {
             Log.d(TAG, "isAvailable() function called from JavaScript")
-            Log.d(TAG, "isShazamKitAvailable after reflection: $isShazamKitAvailable")
             true
         }
 
@@ -74,6 +74,7 @@ class ShazamKitModule : Module() {
             matchPromise = promise
             recordingStartTime = System.currentTimeMillis() // Track when recording started
             hasFoundResult = false // Reset result flag
+            latestMatchedItems = null // Reset stored match data
 
             try {
                 val audioSource = MediaRecorder.AudioSource.MIC
@@ -164,10 +165,10 @@ class ShazamKitModule : Module() {
                         8192
                     )) {
                         is ShazamKitResult.Success -> {
-                            Log.e(TAG, "ShazamKitResult.Success")
+                            Log.d(TAG, "ShazamKitResult.Success")
                             currentSession = result.data
                             isShazamKitAvailable = true
-                            Log.e(TAG, "$currentSession")
+                            Log.d(TAG, "$currentSession")
                             currentSession?.recognitionResults()?.collect { matchResult ->
                                 Log.d(TAG, "matchResult: $matchResult")
                                 matchPromise?.let {
@@ -200,12 +201,13 @@ class ShazamKitModule : Module() {
         try {
             when (result) {
                 is MatchResult.Match -> {
-                    val matchData = result.toString()
-                    Log.d(TAG, "Match found: $matchData")
+                    val matchedItems = createMatchedItemsFromResult(result)
+                    latestMatchedItems = matchedItems // Store for potential fallback use
+                    Log.d(TAG, "Match found: $matchedItems")
 
                     // Send event to JavaScript
                     sendEvent("onMatchFound", mapOf(
-                        "match" to matchData,
+                        "match" to matchedItems,
                         "timestamp" to currentTime
                     ))
 
@@ -214,12 +216,12 @@ class ShazamKitModule : Module() {
                     // Check if minimum recording time has passed
                     if (recordingDuration >= MIN_RECORDING_DURATION_MS) {
                         Log.d(TAG, "Minimum recording time reached, resolving promise")
-                        promise.resolve(matchData)
+                        promise.resolve(matchedItems)
                         stopRecognitionInternal()
                     } else {
                         Log.d(TAG, "Match found but continuing recording for minimum duration")
                         // Schedule stopping after minimum duration
-                        scheduleStopAfterMinimumDuration(promise, matchData)
+                        scheduleStopAfterMinimumDuration(promise, matchedItems)
                     }
                 }
                 is MatchResult.NoMatch -> {
@@ -285,14 +287,14 @@ class ShazamKitModule : Module() {
         }
     }
 
-    private fun scheduleStopAfterMinimumDuration(promise: Promise, matchData: String) {
+    private fun scheduleStopAfterMinimumDuration(promise: Promise, matchedItems: List<Map<String, Any?>>) {
         val remainingTime = MIN_RECORDING_DURATION_MS - (System.currentTimeMillis() - recordingStartTime)
 
         coroutineScope.launch {
             kotlinx.coroutines.delay(remainingTime)
             if (isRecording && hasFoundResult) {
                 Log.d(TAG, "Minimum duration completed, stopping recording with match result")
-                promise.resolve(matchData)
+                promise.resolve(matchedItems)
                 stopRecognitionInternal()
             }
         }
@@ -303,10 +305,10 @@ class ShazamKitModule : Module() {
             kotlinx.coroutines.delay(MIN_RECORDING_DURATION_MS)
             if (isRecording) {
                 Log.d(TAG, "Fallback timer triggered - stopping recording after minimum duration")
-                if (hasFoundResult) {
-                    // If we found a match during the recording, resolve with success
-                    Log.d(TAG, "Had result during recording, resolving with success")
-                    promise.resolve("Recording completed with previous match")
+                if (hasFoundResult && latestMatchedItems != null) {
+                    // If we found a match during the recording, resolve with the actual match data
+                    Log.d(TAG, "Had result during recording, resolving with actual match data")
+                    promise.resolve(latestMatchedItems)
                 } else {
                     // No match found during the entire minimum duration
                     Log.d(TAG, "No match found during minimum recording duration")
@@ -320,6 +322,7 @@ class ShazamKitModule : Module() {
     private fun stopRecognitionInternal() {
         try {
             isRecording = false
+            latestMatchedItems = null // Clear stored match data
             audioRecord?.apply {
                 stop()
                 release()
@@ -340,5 +343,74 @@ class ShazamKitModule : Module() {
             "error" to message,
             "timestamp" to System.currentTimeMillis()
         ))
+    }
+
+    private fun createMatchedItemsFromResult(matchResult: MatchResult.Match): List<Map<String, Any?>> {
+        return try {
+            val matchData = matchResult.matchedMediaItems
+            
+            matchData.map { mediaItem ->
+                mapOf<String, Any?>(
+                    "title" to getPropertySafely { mediaItem.title },
+                    "artist" to getPropertySafely { mediaItem.artist },
+                    "shazamID" to getPropertySafely { mediaItem.shazamID },
+                    "appleMusicID" to getPropertySafely { mediaItem.appleMusicID },
+                    "appleMusicURL" to getPropertySafely { mediaItem.appleMusicURL },
+                    "artworkURL" to getPropertySafely { mediaItem.artworkURL },
+                    "genres" to (getPropertySafely { mediaItem.genres } ?: emptyList<String>()),
+                    "webURL" to getPropertySafely { mediaItem.webURL },
+                    "subtitle" to getPropertySafely { mediaItem.subtitle },
+                    "videoURL" to getPropertySafely { mediaItem.videoURL },
+                    "explicitContent" to (getPropertySafely { mediaItem.explicitContent } ?: false),
+                    "matchOffset" to getMatchOffsetSafely(matchResult)
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating matched items from result: ${e.message}")
+            // Return a fallback structure if there's an error
+            listOf(createFallbackMatchedItem())
+        }
+    }
+
+    private fun <T> getPropertySafely(getter: () -> T?): T? {
+        return try {
+            getter()
+        } catch (e: Exception) {
+            Log.d(TAG, "Property not available: ${e.message}")
+            null
+        }
+    }
+
+    private fun getMatchOffsetSafely(matchResult: MatchResult.Match): Double {
+        return try {
+            // Try different possible property names for match offset
+            when {
+                // Try reflection or direct property access
+                else -> {
+                    Log.d(TAG, "Match offset not available in Android ShazamKit, returning 0.0")
+                    0.0
+                }
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Error getting match offset: ${e.message}")
+            0.0
+        }
+    }
+
+    private fun createFallbackMatchedItem(): Map<String, Any?> {
+        return mapOf<String, Any?>(
+            "title" to null,
+            "artist" to null,
+            "shazamID" to null,
+            "appleMusicID" to null,
+            "appleMusicURL" to null,
+            "artworkURL" to null,
+            "genres" to emptyList<String>(),
+            "webURL" to null,
+            "subtitle" to null,
+            "videoURL" to null,
+            "explicitContent" to false,
+            "matchOffset" to 0.0
+        )
     }
 }

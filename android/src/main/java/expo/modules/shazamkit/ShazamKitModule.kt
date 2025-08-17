@@ -3,48 +3,44 @@ package expo.modules.shazamkit
 import android.Manifest
 import android.content.pm.PackageManager
 import android.media.*
+import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresApi
+import androidx.annotation.RequiresPermission
 import androidx.core.app.ActivityCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.Promise
+import com.shazam.shazamkit.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
-import java.lang.reflect.Method
-import java.lang.reflect.InvocationHandler
-import java.lang.reflect.Proxy
-import org.json.JSONObject
+import java.util.Arrays
 
 class ShazamKitModule : Module() {
 
     companion object {
         private const val TAG = "ShazamKitModule"
+        private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
+        private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
         private const val MIN_RECORDING_DURATION_MS = 10000L // 10 seconds minimum
-        
-        // ShazamKit credentials will be passed from frontend
     }
 
     private var audioRecord: AudioRecord? = null
     private var isRecording = false
     private var recordingThread: Thread? = null
-    private var currentSession: Any? = null
-    private var catalog: Any? = null
-    private var shazamKitInstance: Any? = null
+    private var currentSession: StreamingSession? = null
+    private var catalog: Catalog? = null
     private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.Main)
     private var matchPromise: Promise? = null
     private var recordingStartTime: Long = 0L
     private var hasFoundResult = false
     private var isShazamKitAvailable = false
-    
-    // Reflection-based class and method references
-    private var shazamKitClass: Class<*>? = null
-    private var developerTokenClass: Class<*>? = null
-    private var streamingSessionClass: Class<*>? = null
-    private var matchResultClass: Class<*>? = null
-    private var audioSampleRateClass: Class<*>? = null
 
+
+    // Each module class must implement the definition function. The definition consists of components
+    // that describes the module's functionality and behavior.
+    // See https://docs.expo.dev/modules/module-api for more details about available components.
     override fun definition() = ModuleDefinition {
         // Sets the name of the module that JavaScript code will use to refer to the module. Takes a string as an argument.
         // Can be inferred from module's class name, but it's recommended to set it explicitly for clarity.
@@ -66,318 +62,283 @@ class ShazamKitModule : Module() {
 
         Function("isAvailable") {
             Log.d(TAG, "isAvailable() function called from JavaScript")
-            initializeShazamKitReflection()
             Log.d(TAG, "isShazamKitAvailable after reflection: $isShazamKitAvailable")
-            return@Function isShazamKitAvailable
+            true
         }
 
-        AsyncFunction("startListening") { developerToken: String?, promise: Promise ->
-            Log.d(TAG, "🎯 startListening called from JavaScript")
-            
-            // Require token from frontend
-            if (developerToken.isNullOrEmpty() || developerToken == "your-shazamkit-developer-token-here") {
-                Log.e(TAG, "No valid developer token provided from frontend")
-                promise.reject("TOKEN_REQUIRED", "A valid ShazamKit developer token must be provided from the frontend", null)
+
+        // Main function to start audio recognition
+        AsyncFunction("startListening") { developerToken: String, promise: Promise ->
+            initializeShazamKit(developerToken) // Initialize session with token
+
+            matchPromise = promise
+            recordingStartTime = System.currentTimeMillis() // Track when recording started
+            hasFoundResult = false // Reset result flag
+
+            try {
+                val audioSource = MediaRecorder.AudioSource.MIC
+                val audioFormat = AudioFormat.Builder().setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(44100).build()
+
+                if (ActivityCompat.checkSelfPermission(
+                        appContext.reactContext ?: return@AsyncFunction,
+                        Manifest.permission.RECORD_AUDIO
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    promise.reject("PERMISSION_DENIED", "Audio recording permission not granted", null)
+                    return@AsyncFunction
+                }
+
+                audioRecord =
+                    AudioRecord.Builder().setAudioSource(audioSource).setAudioFormat(audioFormat)
+                        .build()
+                val bufferSize = AudioRecord.getMinBufferSize(
+                    44100,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT
+                )
+                audioRecord?.startRecording()
+                isRecording = true
+
+                // Schedule a fallback timer to ensure recording stops after minimum duration
+                scheduleFallbackStop(promise)
+
+                recordingThread = Thread({
+                    val readBuffer = ByteArray(bufferSize)
+                    Log.d(TAG, "Starting audio recording for minimum ${MIN_RECORDING_DURATION_MS}ms")
+                    while (isRecording) {
+                        val actualRead = audioRecord!!.read(readBuffer, 0, bufferSize)
+                        currentSession?.matchStream(readBuffer, actualRead, System.currentTimeMillis())
+                    }
+                }, "AudioRecorder Thread")
+                recordingThread!!.start()
+            } catch (e: Exception) {
+                e.message?.let {
+                    onError(it)
+                    promise.reject("HANDLE_ERROR", it, e)
+                }
+            }
+        }
+
+        // Function to stop audio recognition
+        AsyncFunction("stopListening") { promise: Promise ->
+            if (!isRecording) {
+                promise.resolve(null)
                 return@AsyncFunction
             }
-            
-            Log.d(TAG, "Using token from frontend: ${developerToken.take(50)}...")
-            
             try {
-                initializeShazamKitReflection()
-                if (isShazamKitAvailable) {
-                    Log.d(TAG, "ShazamKit is available - using real implementation")
-                    startRealShazamKitRecognition(developerToken, promise)
-                } else {
-                    Log.w(TAG, "ShazamKit SDK not available - rejecting with proper error")
-                    promise.reject("SHAZAMKIT_NOT_AVAILABLE", "ShazamKit SDK is not available on this device. Please ensure the ShazamKit AAR is properly integrated.", null)
+                isRecording = false
+                audioRecord?.apply {
+                    stop()
+                    release()
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error with ShazamKit: ${e.message}")
-                promise.reject("SHAZAMKIT_ERROR", "ShazamKit error: ${e.message}", e)
-            }
-        }
-
-        AsyncFunction("stopListening") { promise: Promise ->
-            Log.d(TAG, "stopListening called from JavaScript")
-            try {
-                stopRecognitionInternal()
+                audioRecord = null
+                recordingThread?.join()
+                recordingThread = null
                 promise.resolve(null)
             } catch (e: Exception) {
-                Log.e(TAG, "Error stopping: ${e.message}")
-                promise.reject("STOP_ERROR", "Failed to stop listening: ${e.message}", e)
+                promise.reject("STOP_ERROR", "Error stopping recording: ${e.message}", e)
             }
         }
 
-        AsyncFunction("addToShazamLibrary") { promise: Promise ->
-            Log.d(TAG, "addToShazamLibrary called")
-            try {
-                // For now, return success - this would need Shazam app integration
-                promise.resolve(mapOf("success" to true))
-            } catch (e: Exception) {
-                promise.reject("ADD_ERROR", "Failed to add to library: ${e.message}", e)
-            }
-        }
-
-        Events("onMatchFound", "onNoMatch", "onError", "onChange")
-    }
-
-    private fun initializeShazamKitReflection(): Boolean {
-        return try {
-            Log.d(TAG, "Initializing ShazamKit reflection")
-            
-            // Load core classes first
-            shazamKitClass = Class.forName("com.shazam.shazamkit.ShazamKit")
-            developerTokenClass = Class.forName("com.shazam.shazamkit.DeveloperToken")
-            streamingSessionClass = Class.forName("com.shazam.shazamkit.StreamingSession")
-            matchResultClass = Class.forName("com.shazam.shazamkit.MatchResult")
-            audioSampleRateClass = Class.forName("com.shazam.shazamkit.AudioSampleRateInHz")
-            val shazamCatalogClass = Class.forName("com.shazam.shazamkit.ShazamCatalog")
-            val tokenProviderClass = Class.forName("com.shazam.shazamkit.DeveloperTokenProvider")
-            
-            Log.d(TAG, "✅ All ShazamKit classes loaded successfully!")
-            
-            // Since classes are available, mark as available for now
-            isShazamKitAvailable = true
-            Log.d(TAG, "🎉 ShazamKit SDK is available! Classes loaded successfully.")
-            true
-        } catch (e: ClassNotFoundException) {
-            Log.e(TAG, "ShazamKit class not found: ${e.message}")
-            isShazamKitAvailable = false
-            false
-        } catch (e: NoSuchMethodException) {
-            Log.e(TAG, "ShazamKit method not found: ${e.message}")
-            isShazamKitAvailable = false
-            false
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking ShazamKit availability: ${e.message}")
-            isShazamKitAvailable = false
-            false
+        // Legacy function for compatibility
+        AsyncFunction("setValueAsync") { value: String ->
+            sendEvent("onChange", mapOf("value" to value))
         }
     }
 
-    private fun startRealShazamKitRecognition(token: String?, promise: Promise) {
-        Log.d(TAG, "Starting real ShazamKit recognition")
-        
+    private fun initializeShazamKit(developerToken: String) {
+        Log.d(TAG, "Initializing ShazamKit")
         try {
-            if (ActivityCompat.checkSelfPermission(
-                    appContext.reactContext ?: return,
-                    Manifest.permission.RECORD_AUDIO
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                promise.reject("PERMISSION_DENIED", "Audio recording permission not granted", null)
-                return
-            }
-
-            // Initialize ShazamKit session and start recognition
-            initializeShazamKitSessionWithRecognition(token ?: "", promise)
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error starting real ShazamKit recognition: ${e.message}", e)
-            promise.reject("START_ERROR", "Failed to start audio recognition: ${e.message}", e)
-        }
-    }
-
-    private fun initializeShazamKitSessionWithRecognition(developerToken: String, promise: Promise) {
-        Log.d(TAG, "Initializing ShazamKit session")
-        
-        coroutineScope.launch {
-            try {
-                // Create developer token
-                val tokenInstance = developerTokenClass?.getConstructor(String::class.java)?.newInstance(developerToken)
-                
-                // Create token provider using dynamic proxy
-                val tokenProviderClass = Class.forName("com.shazam.shazamkit.DeveloperTokenProvider")
-                val tokenProvider = Proxy.newProxyInstance(
-                    tokenProviderClass.classLoader,
-                    arrayOf(tokenProviderClass),
-                    InvocationHandler { _, method, _ ->
-                        when (method.name) {
-                            "provideDeveloperToken" -> tokenInstance
-                            else -> null
-                        }
+            coroutineScope.launch {
+                val tokenProvider = object : DeveloperTokenProvider {
+                    override fun provideDeveloperToken(): DeveloperToken {
+                        return DeveloperToken(developerToken)
                     }
-                )
-
-                // Create ShazamKit instance first (it might be an instance method, not static)
-                val shazamKitInstance = try {
-                    shazamKitClass?.getConstructor()?.newInstance()
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to create ShazamKit instance: ${e.message}")
-                    null
                 }
-                
-                Log.d(TAG, "ShazamKit instance created: $shazamKitInstance")
-                
-                // Create catalog with proper method signature: createShazamCatalog(DeveloperTokenProvider, Locale)
-                val defaultLocale = java.util.Locale.getDefault()
-                
-                // Try different approaches to create catalog
-                catalog = when {
-                    shazamKitInstance != null -> {
-                        try {
-                            // Try instance method with both parameters
-                            val createMethod = shazamKitClass?.getMethod("createShazamCatalog", 
-                                Class.forName("com.shazam.shazamkit.DeveloperTokenProvider"), 
-                                java.util.Locale::class.java)
-                            createMethod?.invoke(shazamKitInstance, tokenProvider, defaultLocale)
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Instance method failed: ${e.message}")
-                            try {
-                                // Try static method
-                                val createMethod = shazamKitClass?.getMethod("createShazamCatalog", 
-                                    Class.forName("com.shazam.shazamkit.DeveloperTokenProvider"), 
-                                    java.util.Locale::class.java)
-                                createMethod?.invoke(null, tokenProvider, defaultLocale)
-                            } catch (e2: Exception) {
-                                Log.w(TAG, "Static method also failed: ${e2.message}")
-                                // Fallback to custom catalog for testing
-                                try {
-                                    Log.d(TAG, "Trying createCustomCatalog as fallback...")
-                                    val customCatalogMethod = shazamKitClass?.getMethod("createCustomCatalog")
-                                    customCatalogMethod?.invoke(shazamKitInstance)
-                                } catch (e3: Exception) {
-                                    Log.w(TAG, "Custom catalog also failed: ${e3.message}")
-                                    null
-                                }
+                catalog = ShazamKit.createShazamCatalog(tokenProvider)
+                catalog?.let {
+                    when (val result = ShazamKit.createStreamingSession(
+                        it,
+                        AudioSampleRateInHz.SAMPLE_RATE_44100,
+                        8192
+                    )) {
+                        is ShazamKitResult.Success -> {
+                            Log.e(TAG, "ShazamKitResult.Success")
+                            currentSession = result.data
+                            isShazamKitAvailable = true
+                            Log.e(TAG, "$currentSession")
+                            currentSession?.recognitionResults()?.collect { matchResult ->
+                                Log.d(TAG, "matchResult: $matchResult")
+                                matchPromise?.let {
+                                    handleMatchResult(matchResult, it)
+                                } ?: Log.e(TAG, "matchPromise is null")
+                            } ?: Log.e(TAG, "currentSession is null")
+                        }
+                        is ShazamKitResult.Failure -> {
+                            Log.e(TAG, "ShazamKitResult.Failure")
+                            result.reason.message?.let {
+                                onError(it)
                             }
                         }
                     }
-                    else -> {
-                        Log.w(TAG, "No ShazamKit instance available, trying static method")
-                        try {
-                            val createMethod = shazamKitClass?.getMethod("createShazamCatalog", 
-                                Class.forName("com.shazam.shazamkit.DeveloperTokenProvider"), 
-                                java.util.Locale::class.java)
-                            createMethod?.invoke(null, tokenProvider, defaultLocale)
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Static method failed: ${e.message}")
-                            null
-                        }
-                    }
-                }
-                
-                Log.d(TAG, "Created ShazamKit catalog: $catalog")
-                
-                if (catalog == null) {
-                    Log.e(TAG, "Catalog creation failed - token provider may be invalid")
-                    promise.reject("CATALOG_FAILED", "Failed to create ShazamKit catalog. Check your developer token.", null)
-                    return@launch
-                }
-                
-                // For now, start audio recording and provide a working response
-                Log.d(TAG, "✅ Catalog created successfully! Starting audio recording for recognition...")
-                
-                // Store the instance for session creation
-                this@ShazamKitModule.shazamKitInstance = shazamKitInstance
-                
-                // Start audio recording
-                startAudioRecording()
-                
-                // Send listening state
-                sendShazamEvent("onChange", mapOf(
-                    "state" to "listening", 
-                    "message" to "Listening for music with ShazamKit..."
-                ))
-                
-                // Schedule recognition processing with timeout
-                scheduleRecognitionWithTimeout(promise)
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "Error creating ShazamKit session: ${e.message}", e)
-                promise.reject("SESSION_ERROR", "Failed to initialize ShazamKit session: ${e.message}", e)
+                } ?: Log.e(TAG, "Catalog is null")
             }
-        }
-    }
-    
-    private fun scheduleRecognitionWithTimeout(promise: Promise) {
-        coroutineScope.launch {
-            try {
-                // Let it record for the minimum duration
-                delay(MIN_RECORDING_DURATION_MS)
-                
-                Log.d(TAG, "Recognition timeout reached - stopping recording")
-                stopRecognitionInternal()
-                
-                // For now, return empty results since full session integration is complex
-                // This provides a working foundation that can be extended
-                promise.resolve(emptyList<Map<String, Any>>())
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "Error during recognition timeout: ${e.message}", e)
-                stopRecognitionInternal()
-                promise.reject("RECOGNITION_ERROR", "Recognition failed: ${e.message}", e)
-            }
-        }
-    }
-    
-
-
-    private fun startAudioRecording() {
-        try {
-            val audioSource = MediaRecorder.AudioSource.MIC
-            val audioFormat = AudioFormat.Builder()
-                .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                .setSampleRate(44100)
-                .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-                .build()
-
-            val bufferSize = AudioRecord.getMinBufferSize(44100, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-            audioRecord = AudioRecord(audioSource, 44100, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize)
-
-            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "AudioRecord failed to initialize")
-                return
-            }
-
-            audioRecord?.startRecording()
-            isRecording = true
-            recordingStartTime = System.currentTimeMillis()
-            
-            Log.d(TAG, "Starting audio recording for minimum ${MIN_RECORDING_DURATION_MS}ms")
-
-            recordingThread = Thread {
-                val buffer = ShortArray(bufferSize)
-                while (isRecording) {
-                    val readResult = audioRecord?.read(buffer, 0, buffer.size) ?: 0
-                    if (readResult > 0) {
-                        // Audio data is being captured
-                        // In a full implementation, this would be sent to ShazamKit for processing
-                    }
-                }
-            }
-            recordingThread?.start()
-
         } catch (e: Exception) {
-            Log.e(TAG, "Error starting audio recording: ${e.message}")
+            Log.e(TAG, "Error initializing ShazamKit: ${e.message}")
+        }
+    }
+
+    private fun handleMatchResult(result: MatchResult, promise: Promise) {
+        Log.d(TAG, "handleMatchResult: $result")
+
+        val currentTime = System.currentTimeMillis()
+        val recordingDuration = currentTime - recordingStartTime
+
+        Log.d(TAG, "Recording duration: ${recordingDuration}ms, Min duration: ${MIN_RECORDING_DURATION_MS}ms")
+
+        try {
+            when (result) {
+                is MatchResult.Match -> {
+                    val matchData = result.toString()
+                    Log.d(TAG, "Match found: $matchData")
+
+                    // Send event to JavaScript
+                    sendEvent("onMatchFound", mapOf(
+                        "match" to matchData,
+                        "timestamp" to currentTime
+                    ))
+
+                    hasFoundResult = true
+
+                    // Check if minimum recording time has passed
+                    if (recordingDuration >= MIN_RECORDING_DURATION_MS) {
+                        Log.d(TAG, "Minimum recording time reached, resolving promise")
+                        promise.resolve(matchData)
+                        stopRecognitionInternal()
+                    } else {
+                        Log.d(TAG, "Match found but continuing recording for minimum duration")
+                        // Schedule stopping after minimum duration
+                        scheduleStopAfterMinimumDuration(promise, matchData)
+                    }
+                }
+                is MatchResult.NoMatch -> {
+                    Log.d(TAG, "No match found")
+
+                    // Send event to JavaScript
+                    sendEvent("onNoMatch", mapOf(
+                        "message" to "No match found",
+                        "timestamp" to currentTime
+                    ))
+
+                    // Only reject if minimum recording time has passed
+                    if (recordingDuration >= MIN_RECORDING_DURATION_MS) {
+                        Log.d(TAG, "Minimum recording time reached, no match found")
+                        promise.reject("NO_MATCH", "No match found", null)
+                        stopRecognitionInternal()
+                    } else {
+                        Log.d(TAG, "No match yet, continuing recording for minimum duration")
+                        // Continue recording, don't reject yet
+                    }
+                }
+                is MatchResult.Error -> {
+                    val errorMessage = result.exception.message ?: "Unknown error"
+                    Log.e(TAG, "ShazamKit Error: $errorMessage")
+
+                    // Handle specific ShazamKit errors with more user-friendly messages
+                    val userFriendlyMessage = when {
+                        errorMessage.contains("MATCH_ATTEMPT_FAILED") -> {
+                            "Unable to identify the audio. Please ensure you're playing clear music and try again."
+                        }
+                        errorMessage.contains("NETWORK") -> {
+                            "Network error occurred. Please check your internet connection and try again."
+                        }
+                        errorMessage.contains("TIMEOUT") -> {
+                            "Recognition timed out. Please try again with clearer audio."
+                        }
+                        errorMessage.contains("INVALID_TOKEN") -> {
+                            "Invalid developer token. Please check your ShazamKit credentials."
+                        }
+                        else -> "Recognition failed: $errorMessage"
+                    }
+
+                    Log.e(TAG, "User-friendly error: $userFriendlyMessage")
+
+                    // Send event to JavaScript
+                    sendEvent("onError", mapOf(
+                        "error" to userFriendlyMessage,
+                        "originalError" to errorMessage,
+                        "timestamp" to currentTime
+                    ))
+
+                    // For errors, stop immediately regardless of duration
+                    promise.reject("MATCH_ERROR", userFriendlyMessage, result.exception)
+                    stopRecognitionInternal()
+                }
+            }
+        } catch (e: Exception) {
+            val errorMessage = e.message ?: "Unexpected error occurred"
+            Log.e(TAG, "Exception in handleMatchResult: $errorMessage", e)
+            onError(errorMessage)
+            promise.reject("HANDLE_ERROR", errorMessage, e)
+            stopRecognitionInternal()
+        }
+    }
+
+    private fun scheduleStopAfterMinimumDuration(promise: Promise, matchData: String) {
+        val remainingTime = MIN_RECORDING_DURATION_MS - (System.currentTimeMillis() - recordingStartTime)
+
+        coroutineScope.launch {
+            kotlinx.coroutines.delay(remainingTime)
+            if (isRecording && hasFoundResult) {
+                Log.d(TAG, "Minimum duration completed, stopping recording with match result")
+                promise.resolve(matchData)
+                stopRecognitionInternal()
+            }
+        }
+    }
+
+    private fun scheduleFallbackStop(promise: Promise) {
+        coroutineScope.launch {
+            kotlinx.coroutines.delay(MIN_RECORDING_DURATION_MS)
+            if (isRecording) {
+                Log.d(TAG, "Fallback timer triggered - stopping recording after minimum duration")
+                if (hasFoundResult) {
+                    // If we found a match during the recording, resolve with success
+                    Log.d(TAG, "Had result during recording, resolving with success")
+                    promise.resolve("Recording completed with previous match")
+                } else {
+                    // No match found during the entire minimum duration
+                    Log.d(TAG, "No match found during minimum recording duration")
+                    promise.reject("NO_MATCH", "No match found after ${MIN_RECORDING_DURATION_MS / 1000} seconds of recording", null)
+                }
+                stopRecognitionInternal()
+            }
         }
     }
 
     private fun stopRecognitionInternal() {
-        Log.d(TAG, "Stopping recognition")
-        
-        isRecording = false
-        hasFoundResult = false
-        
         try {
-            audioRecord?.stop()
-            audioRecord?.release()
+            isRecording = false
+            audioRecord?.apply {
+                stop()
+                release()
+            }
             audioRecord = null
+            recordingThread?.join()
+            recordingThread = null
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping audio recording: ${e.message}")
+            Log.e(TAG, "Error stopping recognition internally: ${e.message}")
         }
-        
-        recordingThread?.interrupt()
-        recordingThread = null
-        
-        sendShazamEvent("onChange", mapOf("state" to "idle"))
     }
-    
-    private fun sendShazamEvent(eventName: String, params: Map<String, Any>) {
-        try {
-            this@ShazamKitModule.sendEvent(eventName, params)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error sending event $eventName: ${e.message}")
-        }
+
+    private fun onError(message: String) {
+        Log.e(TAG, "onError: $message")
+
+        // Send error event to JavaScript
+        sendEvent("onError", mapOf(
+            "error" to message,
+            "timestamp" to System.currentTimeMillis()
+        ))
     }
 }

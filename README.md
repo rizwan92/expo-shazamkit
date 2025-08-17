@@ -124,17 +124,21 @@ Add to `android/app/src/main/AndroidManifest.xml`:
 For **bare React Native** projects, you need to manually add the ShazamKit Android AAR to your app's dependencies.
 
 **Option 1: Automatic setup (Recommended)**
+
 ```bash
 npx react-native-apple-shazamkit setup-android
 ```
 
 **Option 2: Manual setup**
+
 1. Copy the AAR file from the module to your app:
+
 ```bash
 cp node_modules/react-native-apple-shazamkit/android/libs/shazamkit-android-release.aar android/app/libs/
 ```
 
 2. Add the dependency to your `android/app/build.gradle`:
+
 ```gradle
 dependencies {
     implementation files('libs/shazamkit-android-release.aar')
@@ -466,12 +470,14 @@ This error occurs when building a release AAR for Android. The issue is that the
 **For bare React Native projects:**
 
 1. Copy the AAR file to your app:
+
 ```bash
 mkdir -p android/app/libs
 cp node_modules/react-native-apple-shazamkit/android/libs/shazamkit-android-release.aar android/app/libs/
 ```
 
 2. Add the dependency to your `android/app/build.gradle`:
+
 ```gradle
 dependencies {
     implementation files('libs/shazamkit-android-release.aar')

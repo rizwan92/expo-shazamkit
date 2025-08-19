@@ -14,7 +14,7 @@ export function helloWithName(name: string): string {
   return ExpoShazamKit.helloWithName(name);
 }
 
-export async function startListening(token: string): Promise<MatchedItem[]> {
+export async function startListening(token?: string): Promise<MatchedItem[]> {
   if (Platform.OS === "ios") {
     return await ExpoShazamKit.startListening();
   }

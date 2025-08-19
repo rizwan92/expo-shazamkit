@@ -1,3 +1,4 @@
+import { Platform } from "expo-modules-core";
 import ExpoShazamKit from "./ExpoShazamKit";
 import { MatchedItem } from "./ExpoShazamKit.types";
 
@@ -14,6 +15,9 @@ export function helloWithName(name: string): string {
 }
 
 export async function startListening(token: string): Promise<MatchedItem[]> {
+  if (Platform.OS === "ios") {
+    return await ExpoShazamKit.startListening();
+  }
   return await ExpoShazamKit.startListening(token);
 }
 

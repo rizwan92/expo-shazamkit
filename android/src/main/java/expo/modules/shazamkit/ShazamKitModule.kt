@@ -362,7 +362,8 @@ class ShazamKitModule : Module() {
                     "subtitle" to getPropertySafely { mediaItem.subtitle },
                     "videoURL" to getPropertySafely { mediaItem.videoURL },
                     "explicitContent" to (getPropertySafely { mediaItem.explicitContent } ?: false),
-                    "matchOffset" to getMatchOffsetSafely(matchResult)
+                    "matchOffset" to getMatchOffsetSafely(matchResult),
+                    "isrc" to getPropertySafely { mediaItem.isrc }
                 )
             }
         } catch (e: Exception) {
@@ -410,7 +411,8 @@ class ShazamKitModule : Module() {
             "subtitle" to null,
             "videoURL" to null,
             "explicitContent" to false,
-            "matchOffset" to 0.0
+            "matchOffset" to 0.0,
+            "isrc" to null
         )
     }
 }

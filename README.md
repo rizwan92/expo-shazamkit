@@ -338,6 +338,9 @@ interface MatchedItem {
 
   /** Match offset in seconds */
   matchOffset?: number;
+
+  /** International Standard Recording Code (ISRC) */
+  isrc?: string;
 }
 ```
 

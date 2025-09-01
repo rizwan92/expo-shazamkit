@@ -29,6 +29,7 @@ interface MatchedItem {
   videoURL?: string;
   explicitContent?: boolean;
   matchOffset?: number;
+  isrc?: string;
 }
 
 const ShazamExample: React.FC = () => {

@@ -50,4 +50,8 @@ export type MatchedItem = {
    * The timecode in the reference recording that matches the start of the query, in seconds.
    */
   matchOffset: number;
+  /**
+   * The International Standard Recording Code (ISRC) for the media item.
+   */
+  isrc?: string;
 };

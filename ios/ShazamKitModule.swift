@@ -85,6 +85,7 @@ public class ShazamKitModule: Module, ResultHandler {
         videoURL: item.videoURL?.absoluteString,
         explicitContent: item.explicitContent,
         matchOffset: Double(item.matchOffset.description) ?? 0.0
+        isrc: item.isrc
       )
     }
     

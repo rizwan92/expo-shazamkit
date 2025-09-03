@@ -26,5 +26,5 @@ internal struct MatchedItem: Record {
     @Field
     var matchOffset: Double = 0.0
     @Field
-    var isrc: String?
+    var isrc: String? = nil
 }
